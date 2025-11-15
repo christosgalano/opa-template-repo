@@ -152,6 +152,35 @@ conftest verify --policy policy/
 
 **Why from root?** Policies import utilities from `policy/<tool>/util/`. Running tests on individual folders fails with "undefined function" errors.
 
+### Ad-Hoc Policy Queries
+
+For quick manual testing without formal test files:
+
+```bash
+# Test a single policy against input
+opa eval \
+  --data policy/ \
+  --input testdata/terraform/azurerm/storage_account/tfplan.json \
+  --format pretty \
+  'data.terraform.provider.azurerm.resources.storage_account.deny'
+
+# Check if any denies exist (exit code based)
+opa eval \
+  --data policy/ \
+  --input tfplan.json \
+  --fail-defined \
+  'data.terraform.provider.azurerm.resources.storage_account.deny'
+
+# Evaluate multiple packages
+opa eval \
+  --data policy/ \
+  --input tfplan.json \
+  --format pretty \
+  'data.terraform.provider.azurerm'
+```
+
+**Use cases**: Quick validation during development, debugging policies, testing against production plans.
+
 ---
 
 ## Integration Testing
@@ -221,31 +250,20 @@ resource "azurerm_storage_account" "non_compliant" {
 # 1. Navigate to test directory
 cd testdata/terraform/azurerm/storage_account
 
-# 2. Set up environment (if needed)
-export ARM_SUBSCRIPTION_ID="your-subscription-id"
-export ARM_TENANT_ID="your-tenant-id"
-
-# 3. Initialize Terraform
+# 2. Initialize and generate plan
 terraform init -backend=false
-
-# 4. Generate plan JSON
 terraform plan -out=tfplan
 terraform show -json tfplan > tfplan.json
 
-# 5. Test with OPA
+# 3. Test with Conftest (recommended - better output)
 cd ../../../..  # Back to repo root
-opa eval \
-  --data policy/ \
-  --input testdata/terraform/azurerm/storage_account/tfplan.json \
-  --format pretty \
-  "data.terraform.provider.azurerm.resources.storage_account.deny"
-
-# 6. Test with Conftest (better output)
 conftest test \
   --policy policy/ \
   --namespace terraform.provider.azurerm.resources.storage_account \
   testdata/terraform/azurerm/storage_account/tfplan.json
 ```
+
+**Note**: Set `ARM_SUBSCRIPTION_ID` and `ARM_TENANT_ID` environment variables if provider requires authentication.
 
 #### For ARM Templates
 

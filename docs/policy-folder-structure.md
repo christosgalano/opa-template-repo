@@ -10,6 +10,30 @@ The structure follows three layers:
 2. **Provider/Domain** – Tool-specific grouping (e.g., Terraform provider, ARM namespace)
 3. **Policy Type** – Single-resource vs multi-resource scenarios
 
+### How Imports Reflect Folder Structure
+
+```text
+Folder Path                              Package Declaration                               Import Statement
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+policy/terraform/util/plan_helpers.rego  package terraform.util.plan_helpers              import data.terraform.util.plan_helpers as plan
+policy/terraform/provider/azurerm/       package terraform.provider.azurerm.              import data.terraform.provider.azurerm.
+  resources/storage_account/policy.rego    resources.storage_account                          resources.storage_account as sa
+policy/terraform/scenarios/              package terraform.scenarios.                     import data.terraform.scenarios.
+  multicloud_backups/policy.rego             multicloud_backups                                multicloud_backups as backup
+```
+
+**Key principle**: Package names directly mirror folder paths, making imports predictable and maintainable.
+
+### Utility Module Constraints
+
+⚠️ **Important**: Utility folders (`util/`) **MUST NOT** import provider policies or scenario policies. Utilities should contain only:
+
+- Pure helper functions
+- Data selection/filtering logic
+- Common validation patterns
+
+This prevents circular dependencies and keeps utilities truly reusable across all policies.
+
 ## Standard Layout
 
 ```text

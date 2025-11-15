@@ -1,18 +1,19 @@
-# Policy Library
+# opa-template-repo
 
 ## Purpose
 
-This repository provides a central, extensible library for managing and sharing policies that govern Terraform Infrastructure as Code (IaC) deployments. The structure is designed to support policies for any Terraform provider, with an initial focus on Azure DevOps.
+This repository provides a central, extensible library for managing and sharing OPA (Open Policy Agent) policies for infrastructure-as-code and other JSON-based validation use cases. The structure is tool-agnostic and designed to support policies for any tool that produces JSON output (Terraform, ARM templates, etc.).
 
-Policies in this library help ensure compliance, security, and good practices across Terraform-managed cloud environments. The design enables teams to:
+Policies in this library help ensure compliance, security, and best practices across your infrastructure. The design enables teams to:
 
-- Enforce organizational standards for Terraform resources
-- Prevent misconfigurations in Terraform plans
-- Promote reusable, scalable policy development for Terraform
+- Enforce organizational standards and governance policies
+- Prevent misconfigurations before deployment
+- Promote reusable, scalable policy development across multiple tools and providers
+- Validate infrastructure at scale with consistent patterns
 
 ## Getting Started
 
-- **Policy structure:** See [`docs/policy-folder-structure.md`](docs/policy-folder-structure.md) for details on how policies are organized and how to add new providers, resources, or utilities.
-- **Policy development:** For guidance on authoring policies and good practices, refer to [`docs/policy-development.md`](docs/policy-development.md).
-- **Policy testing:** Learn how to test policies with both unit tests and real Terraform plans in [`docs/policy-testing.md`](docs/policy-testing.md).
-- **CI/CD pipelines:** Continuous integration and policy publishing workflows are documented in the relevant pipeline YAML files under `.azurepipelines/`.
+- **Policy structure:** See [`docs/policy-folder-structure.md`](docs/policy-folder-structure.md) for details on the tool-agnostic folder hierarchy (Tool → Provider → Resources/Scenarios) and how to organize policies.
+- **Policy development:** For guidance on authoring policies and best practices, refer to [`docs/policy-development.md`](docs/policy-development.md).
+- **Policy testing:** Learn how to test policies with both unit tests and integration tests in [`docs/policy-testing.md`](docs/policy-testing.md).
+- **CI/CD pipelines:** See `.github/workflows/` for CI and policy bundle publishing workflows using GitHub Actions.

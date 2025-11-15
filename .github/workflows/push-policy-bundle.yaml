@@ -1,7 +1,22 @@
-# File: .azurepipelines/push-policy-bundle.yaml
-
+# File: .github/workflows/push-policy-bundle.yaml
+#
 # Description:
-# This pipeline pushes a policy bundle to Azure Container Registry (ACR).
+# Push an OPA policy bundle (bundle.tar.gz) to an Azure Storage Account.
+#
+# - Validates policies first by calling .github/workflows/ci.yaml
+# - Builds an OPA bundle from a given path (e.g. policy/, terraform/, terraform/azuredevops)
+# - Verifies the path exists before bundling
+# - Uploads the bundle to a single Azure Blob Storage container: "policy-library"
+#
+# Requirements:
+# - Reusable CI workflow at .github/workflows/ci.yaml
+# - Repo secrets:
+#     AZURE_CLIENT_ID
+#     AZURE_TENANT_ID
+#     AZURE_SUBSCRIPTION_ID
+# - Repo variables:
+#     POLICY_STORAGE_ACCOUNT: Azure Storage Account Name
+#     STORAGE_CONTAINER: Azure Storage Container Name
 #
 
 name: Push Policy Bundle
@@ -9,32 +24,21 @@ name: Push Policy Bundle
 on:
   workflow_dispatch:
     inputs:
-      bundle_directory:
-        description: 'Bundle Directory Under Policy'
-        required: true
-        default: 'terraform'
-        type: choice
-        options:
+      bundle_path:
+        description: >
+          Path to bundle (relative to repo root), e.g.:
+          - policy
           - terraform
-      bundle_name:
-        description: 'Bundle Name'
-        required: true
-        default: 'terraform'
-        type: string
-      bundle_version:
-        description: 'Bundle Version (vX.Y.Z or latest)'
-        required: true
-        default: 'latest'
-        type: string
-      container_registry:
-        description: 'Azure Container Registry'
-        required: true
-        default: 'crpolicycodegovernance'
-        type: string
-      policy_directory:
-        description: 'Policy Directory'
+          - terraform/azuredevops
         required: true
         default: 'policy'
+        type: string
+      blob_name:
+        description: >
+          Optional blob name (defaults to <bundle_path-with-slashes-replaced>.tar.gz
+          if left empty)
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -42,58 +46,101 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  validate:
     name: Rego Policy Validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Test
-        uses: ./.github/actions/test
-        with:
-          policy_directory: ${{ inputs.policy_directory }}
-          threshold: 90
-          no_fail_test: false
-          no_fail_coverage: false
+    uses: ./.github/workflows/ci.yaml
+    secrets: inherit
 
   push-bundle:
-    name: Push Policy Bundle
-    needs: test
+    name: Push Policy Bundle to Storage
+    needs: validate
     runs-on: ubuntu-latest
+
     env:
-      REGISTRY: ${{ inputs.container_registry }}.azurecr.io
-      BUNDLE: ${{ inputs.policy_directory }}/${{ inputs.bundle_directory }}
+      BUNDLE_PATH: ${{ inputs.bundle_path }}
+      POLICY_STORAGE_ACCOUNT: ${{ vars.POLICY_STORAGE_ACCOUNT }}
+      STORAGE_CONTAINER: ${{ vars.POLICY_STORAGE_CONTAINER }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Azure Login
+      - name: Ensure bundle path exists
+        run: |
+          echo "Bundle path: ${BUNDLE_PATH}"
+          if [ ! -d "${BUNDLE_PATH}" ]; then
+            echo "::error::Bundle path '${BUNDLE_PATH}' does not exist."
+            exit 1
+          fi
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+
+      - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup ORAS
-        uses: oras-project/setup-oras@v1
-        with:
-          version: latest
-
-      - name: Setup Conftest
-        uses: ./.github/actions/setup-conftest
-
-      - name: Login to ACR
+      - name: Build OPA bundle
         run: |
-          USER_NAME="00000000-0000-0000-0000-000000000000"
-          PASSWORD=$(az acr login --name ${{ inputs.container_registry }} --expose-token --output tsv --query accessToken)
-          oras login ${{ env.REGISTRY }} --username $USER_NAME --password $PASSWORD
+          echo "##[section] Building OPA bundle from path: ${BUNDLE_PATH}"
 
-      - name: Push policy bundle
-        run: conftest push ${{ env.REGISTRY }}/${{ inputs.bundle_name }}:${{ inputs.bundle_version }} --policy ${{ env.BUNDLE }}
+          # Normalize path (strip trailing slash)
+          NORMALIZED_PATH="${BUNDLE_PATH%/}"
 
-      - name: Logout from ACR and Azure
+          echo "Normalized path: ${NORMALIZED_PATH}"
+          echo "opa build --bundle \"${NORMALIZED_PATH}\" --output bundle.tar.gz --revision $(git rev-parse HEAD)"
+
+          if ! opa build --bundle "${NORMALIZED_PATH}" --output bundle.tar.gz --revision "$(git rev-parse HEAD)"; then
+            echo "::error::OPA build failed"
+            exit 1
+          fi
+
+          echo "OPA build completed successfully."
+
+      - name: Compute blob name
+        id: blob
+        run: |
+          INPUT_BLOB_NAME="${{ inputs.blob_name }}"
+
+          if [ -n "${INPUT_BLOB_NAME}" ]; then
+            BLOB_NAME="${INPUT_BLOB_NAME}"
+          else
+            # Derive from path: terraform/azuredevops -> terraform-azuredevops.tar.gz
+            NORMALIZED_PATH="${BUNDLE_PATH%/}"
+            SAFE_NAME="$(echo "${NORMALIZED_PATH}" | tr '/' '-')"
+            BLOB_NAME="${SAFE_NAME}.tar.gz"
+          fi
+
+          echo "Using blob name: ${BLOB_NAME}"
+          echo "blob_name=${BLOB_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload bundle to Azure Storage
+        run: |
+          if [ -z "${POLICY_STORAGE_ACCOUNT}" ]; then
+            echo "::error::POLICY_STORAGE_ACCOUNT secret is not set."
+            exit 1
+          fi
+
+          BLOB_NAME="${{ steps.blob.outputs.blob_name }}"
+
+          echo "Uploading bundle.tar.gz to:"
+          echo "  Account   : ${POLICY_STORAGE_ACCOUNT}"
+          echo "  Container : ${STORAGE_CONTAINER}"
+          echo "  Blob name : ${BLOB_NAME}"
+
+          az storage blob upload \
+            --account-name "${POLICY_STORAGE_ACCOUNT}" \
+            --container-name "${STORAGE_CONTAINER}" \
+            --name "${BLOB_NAME}" \
+            --file bundle.tar.gz \
+            --overwrite true \
+            --auth-mode login
+
+      - name: Logout from Azure
         if: always()
-        run: |
-          oras logout ${{ env.REGISTRY }}
-          az logout
+        run: az logout || true

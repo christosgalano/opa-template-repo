@@ -460,7 +460,77 @@ is_in_hub_vnet(storage, plan) if {
 - Avoid deep nesting (extract to helpers)
 - Use consistent naming conventions
 
-### 8. Review Regularly
+### 8. Optimize for Performance
+
+As policies grow, consider performance:
+
+**❌ Avoid**: Repeated iteration in nested loops
+
+```rego
+# Inefficient - iterates resource_changes multiple times
+deny contains msg if {
+  storage := input.resource_changes[_]  # First iteration
+  storage.type == "azurerm_storage_account"
+  nsg := input.resource_changes[_]      # Nested iteration - expensive!
+  nsg.type == "azurerm_network_security_group"
+  # Complex logic...
+}
+```
+
+**✅ Prefer**: Pre-filtered helper functions
+
+```rego
+# Efficient - iterate once, filter in helpers
+deny contains msg if {
+  storage := plan.storage_accounts(tfplan)[_]  # Pre-filtered
+  nsg := plan.network_security_groups(tfplan)[_]  # Pre-filtered
+  # Complex logic...
+}
+
+# Helper does filtering once
+storage_accounts(plan) = [r |
+  r := plan.resource_changes[_]
+  r.type == "azurerm_storage_account"
+]
+```
+
+**Performance tips**:
+
+- Filter early with helper functions
+- Avoid deep nesting of iterations
+- Cache expensive lookups in local variables
+- Use `some` keyword for existential checks when possible
+
+### 9. Use Metadata Consistently
+
+Always include `rego.metadata.rule()` in deny messages for CI readability:
+
+```rego
+# METADATA
+# title: Storage encryption required
+# description: All storage accounts must have encryption enabled
+
+deny contains msg if {
+  storage := resources[_]
+  not storage.encryption_enabled
+  annotation := rego.metadata.rule()
+  # CI tools can parse this structured format
+  msg := sprintf("%s: %s (Resource: %s)", [
+    annotation.title,
+    annotation.description,
+    storage.address
+  ])
+}
+```
+
+This ensures:
+
+- ✅ Consistent error message format
+- ✅ CI/CD tools can extract metadata
+- ✅ Reports are more readable
+- ✅ Easy to filter/search violations
+
+### 10. Review Regularly
 
 Schedule periodic reviews:
 
