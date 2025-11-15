@@ -1,0 +1,119 @@
+# File: .github/workflows/ci.yaml
+#
+# Description:
+# This pipeline validates Rego policies using Open Policy Agent (OPA) and Conftest.
+#
+
+name: CI
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - '*'
+  # pull_request:
+  #   branches:
+  #     - main
+
+jobs:
+  validate:
+    name: Rego Policy Validation
+    runs-on: ubuntu-latest
+
+    env:
+      POLICY_DIR: policy
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+
+      - name: Setup Regal
+        uses: open-policy-agent/setup-regal@v1
+        with:
+          version: latest
+
+      - name: Setup Conftest
+        uses: ./.github/actions/setup-conftest
+
+      - name: Lint files
+        run: regal lint "${POLICY_DIR}"
+
+      # --- OPA tests & coverage -> JSON ---
+
+      - name: Run OPA tests
+        run: |
+          opa test --format json "${POLICY_DIR}" > test.json
+
+      - name: Run OPA coverage
+        run: |
+          opa test --coverage --format json "${POLICY_DIR}" > coverage.json
+
+      # --- JSON -> JUnit & Cobertura XML (your scripts) ---
+
+      - name: Convert OPA test JSON to JUnit XML
+        run: |
+          python scripts/opa_test_to_junit.py \
+            --test-json test.json \
+            --output-xml test-results.xml
+
+      - name: Convert OPA coverage JSON to Cobertura XML
+        run: |
+          python scripts/opa_coverage_to_cobertura.py \
+            --coverage-json coverage.json \
+            --output-xml coverage.xml \
+            --policy-directory "${POLICY_DIR}" \
+            --coverage-threshold 90
+
+      # --- Publish test results (OPA) ---
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: success() || failure()
+        with:
+          check_name: Test Results
+          files: test-results.xml
+          comment_mode: always
+          fail_on: test failures
+          action_fail: false # job doesn't fail because of this action
+          ignore_runs: false
+          job_summary: true
+          compare_to_earlier_commit: true
+          check_run_annotations: all tests, skipped tests
+
+      # If you also produce Conftest JUnit, you can add another invocation:
+      # - name: Publish Conftest results
+      #   uses: EnricoMi/publish-unit-test-result-action@v2
+      #   if: success() || failure()
+      #   with:
+      #     check_name: Conftest Results
+      #     junit_files: conftest_junit.xml
+      #     fail_on: test failures
+      #     action_fail: false
+
+      # --- Publish coverage summary + badge ---
+
+      - name: Publish code coverage results
+        if: success() || failure()
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: coverage.xml # Cobertura XML from your script
+          badge: true
+          output: both # summary to file + console
+          format: markdown
+          indicators: true
+          thresholds: '90 95' # adjust to your min/good thresholds
+          fail_below_min: true # job fails if coverage < first threshold
+          hide_complexity: true
+          hide_branch_rate: false
+
+      - name: Code coverage summary
+        if: success() || failure()
+        run: |
+          echo "## Code Coverage Results" >> "$GITHUB_STEP_SUMMARY"
+          cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,140 @@
+# File: .azurepipelines/templates/coverage.yaml
+#
+# Description:
+# This template is a series of steps that:
+# 1. Installs the latest version of OPA.
+# 2. Runs OPA tests and generates JSON reports.
+# 3. Converts the test JSON to JUnit XML format.
+# 4. Converts the coverage JSON to Cobertura XML format.
+# 5. Publishes the test results and coverage results.
+# 6. Checks the validation results and sets the appropriate exit status.
+#
+
+parameters:
+  - name: policy_directory
+    displayName: Policy Directory
+    type: string
+    default: policy
+
+  - name: test_report_file
+    displayName: Test Report File
+    type: string
+    default: test.xml
+
+  - name: coverage_report_file
+    displayName: Coverage Report File
+    type: string
+    default: coverage.xml
+
+  - name: threshold
+    displayName: Coverage Threshold
+    type: number
+    default: 90
+
+  - name: no_fail_test
+    displayName: Don't Fail on Failed Tests
+    type: boolean
+    default: 'false'
+    values:
+      - 'true'
+      - 'false'
+
+  - name: no_fail_coverage
+    displayName: Don't Fail on Coverage Threshold
+    type: boolean
+    default: 'false'
+    values:
+      - 'true'
+      - 'false'
+
+steps:
+  - template: util/tools/opa/install.yaml@pipeline-library
+    parameters:
+      tools:
+        - name: opa
+          version: latest
+
+  - bash: |
+      set +e
+      opa test --format json ${{ parameters.policy_directory }} > test.json
+      test_exit_code=$?
+      echo "##vso[task.setvariable variable=opaTestExitCode]$test_exit_code"
+      opa test --coverage --threshold ${{ parameters.threshold }} --format json ${{ parameters.policy_directory }} > coverage.json
+      coverage_exit_code=$?
+      echo "##vso[task.setvariable variable=opaCoverageExitCode]$coverage_exit_code"
+      exit 0
+    displayName: Generate JSON reports
+
+  - bash: |
+      python scripts/opa_test_to_junit.py \
+        --test-json test.json \
+        --output-xml ${{ parameters.test_report_file }}
+    displayName: Convert test JSON to JUnit XML
+
+  - bash: |
+      python scripts/opa_coverage_to_cobertura.py \
+        --coverage-json coverage.json \
+        --output-xml ${{ parameters.coverage_report_file }} \
+        --policy-directory ${{ parameters.policy_directory }} \
+        --coverage-threshold ${{ parameters.threshold }}
+    displayName: Convert coverage JSON to Cobertura XML
+
+  - task: PublishTestResults@2
+    condition: succeededOrFailed()
+    displayName: Publish test results
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: ${{ parameters.test_report_file }}
+      mergeTestResults: false
+      testRunTitle: OPA Test Results
+      failTaskOnFailedTests: false
+      publishRunAttachments: true
+
+  - task: PublishCodeCoverageResults@2
+    condition: succeededOrFailed()
+    displayName: Publish coverage results
+    inputs:
+      summaryFileLocation: ${{ parameters.coverage_report_file }}
+      pathToSources: ${{ parameters.policy_directory }}
+
+  - bash: |
+      # Initialize overall exit status
+      exit_status=0
+
+      # Check test exit code
+      if [[ "${OPA_TEST_EXIT_CODE}" != "0" ]]; then
+        if [[ "${{ parameters.no_fail_test }}" == "true" ]]; then
+          echo "##[warning]OPA tests failed (exit code: ${OPA_TEST_EXIT_CODE}) but no_fail_test is set to true"
+        else
+          echo "##[error]OPA tests failed (exit code: ${OPA_TEST_EXIT_CODE})"
+          exit_status=1
+        fi
+      else
+        echo "##[section]✅ All tests passed"
+      fi
+
+      # Check coverage exit code
+      if [[ "${OPA_COVERAGE_EXIT_CODE}" != "0" ]]; then
+        if [[ "${{ parameters.no_fail_coverage }}" == "true" ]]; then
+          echo "##[warning]Coverage threshold not met (exit code: ${OPA_COVERAGE_EXIT_CODE}) but no_fail_coverage is set to true"
+        else
+          echo "##[error]Coverage threshold not met (exit code: ${OPA_COVERAGE_EXIT_CODE})"
+          exit_status=1
+        fi
+      else
+        echo "##[section]✅ Coverage threshold met (${{ parameters.threshold }}%)"
+      fi
+
+      # Final summary
+      echo ""
+      echo "##[section]Validation Summary:"
+      echo "- Test failures allowed: ${{ parameters.no_fail_test }}"
+      echo "- Coverage failures allowed: ${{ parameters.no_fail_coverage }}"
+      echo "- Final exit status: ${exit_status}"
+
+      # Exit with the appropriate code
+      exit ${exit_status}
+    displayName: Check validation results
+    env:
+      OPA_TEST_EXIT_CODE: $(opaTestExitCode)
+      OPA_COVERAGE_EXIT_CODE: $(opaCoverageExitCode)

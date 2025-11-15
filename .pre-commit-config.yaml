@@ -1,0 +1,18 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.45.0
+    hooks:
+      - id: markdownlint
+        args: [--ignore, TODO.md]
+  - repo: https://github.com/open-policy-agent/conftest
+    rev: v0.61.0
+    hooks:
+      - id: conftest-verify
+        args: [--policy, policy]

@@ -1,0 +1,47 @@
+# File: .github/actions/setup-conftest/action.yaml
+
+name: 'Setup Conftest'
+description: 'Install Conftest for policy testing'
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache Conftest
+      id: cache-conftest
+      uses: actions/cache@v4
+      with:
+        path: /usr/local/bin/conftest
+        key: conftest-${{ runner.os }}-${{ runner.arch }}-latest
+
+    - name: Install Conftest
+      if: steps.cache-conftest.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        # Detect architecture
+        arch="x86_64"
+        if [[ "$(uname -m)" == "aarch64" ]]; then
+          arch="arm64"
+        fi
+
+        echo "Fetching latest conftest version..."
+        latest_version=$(curl -s "https://api.github.com/repos/open-policy-agent/conftest/releases/latest" | jq -r '.tag_name' | cut -c 2-)
+
+        os_name=$(uname)
+        download_url="https://github.com/open-policy-agent/conftest/releases/download/v${latest_version}/conftest_${latest_version}_${os_name}_${arch}.tar.gz"
+
+        echo "Installing conftest version ${latest_version} on ${os_name}-${arch}..."
+        echo "Downloading from: ${download_url}"
+
+        curl -fsSL "${download_url}" -o conftest.tar.gz
+        tar -xzf conftest.tar.gz conftest
+        sudo mv conftest /usr/local/bin/
+        rm conftest.tar.gz
+
+    - name: Verify Conftest installation
+      shell: bash
+      run: |
+        if ! command -v conftest &> /dev/null; then
+          echo "Error: conftest installation failed."
+          exit 1
+        fi
+        echo "Conftest installed successfully at $(which conftest)"
+        conftest --version

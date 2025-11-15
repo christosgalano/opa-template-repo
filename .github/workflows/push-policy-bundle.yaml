@@ -1,0 +1,99 @@
+# File: .azurepipelines/push-policy-bundle.yaml
+
+# Description:
+# This pipeline pushes a policy bundle to Azure Container Registry (ACR).
+#
+
+name: Push Policy Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_directory:
+        description: 'Bundle Directory Under Policy'
+        required: true
+        default: 'terraform'
+        type: choice
+        options:
+          - terraform
+      bundle_name:
+        description: 'Bundle Name'
+        required: true
+        default: 'terraform'
+        type: string
+      bundle_version:
+        description: 'Bundle Version (vX.Y.Z or latest)'
+        required: true
+        default: 'latest'
+        type: string
+      container_registry:
+        description: 'Azure Container Registry'
+        required: true
+        default: 'crpolicycodegovernance'
+        type: string
+      policy_directory:
+        description: 'Policy Directory'
+        required: true
+        default: 'policy'
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Rego Policy Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test
+        uses: ./.github/actions/test
+        with:
+          policy_directory: ${{ inputs.policy_directory }}
+          threshold: 90
+          no_fail_test: false
+          no_fail_coverage: false
+
+  push-bundle:
+    name: Push Policy Bundle
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ${{ inputs.container_registry }}.azurecr.io
+      BUNDLE: ${{ inputs.policy_directory }}/${{ inputs.bundle_directory }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup ORAS
+        uses: oras-project/setup-oras@v1
+        with:
+          version: latest
+
+      - name: Setup Conftest
+        uses: ./.github/actions/setup-conftest
+
+      - name: Login to ACR
+        run: |
+          USER_NAME="00000000-0000-0000-0000-000000000000"
+          PASSWORD=$(az acr login --name ${{ inputs.container_registry }} --expose-token --output tsv --query accessToken)
+          oras login ${{ env.REGISTRY }} --username $USER_NAME --password $PASSWORD
+
+      - name: Push policy bundle
+        run: conftest push ${{ env.REGISTRY }}/${{ inputs.bundle_name }}:${{ inputs.bundle_version }} --policy ${{ env.BUNDLE }}
+
+      - name: Logout from ACR and Azure
+        if: always()
+        run: |
+          oras logout ${{ env.REGISTRY }}
+          az logout

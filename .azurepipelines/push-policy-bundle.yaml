@@ -1,0 +1,176 @@
+# File: .azurepipelines/push-policy-bundle.yaml
+
+# Description:
+# This pipeline pushes one or two policy bundles to an Azure Storage Account.
+#
+# If the `policy` directory is present in the `directories` parameter,
+# it will push only the `policy` directory bundle (only job `pushPolicyDirectoryBundle` will run).
+#
+# If the `policy` directory is not present, both jobs will run to push:
+# - The specified directories as a bundle (including the `policy/util` directory)
+# - The `policy` directory bundle separately
+#
+# The `policy` directory bundle will always be named `policy.tar.gz`
+# Other bundles will be named based on the directories provided, e.g., `azuredevops-azurerm-aws.tar.gz`
+#
+# Requirements:
+# - The pipeline must have the following variables set in the variable group `policy-library`:
+#   - POLICY_SP_CLIENT_ID: Service Principal Client ID
+#   - POLICY_SP_CLIENT_PASSWORD: Service Principal Client Password
+#   - POLICY_SP_TENANT_ID: Azure Tenant ID
+#   - POLICY_STORAGE_ACCOUNT: Azure Storage Account Name
+#
+
+trigger: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+resources:
+  repositories:
+    - repository: pipeline-library
+      type: git
+      name: Terraform-Governance-Center/pipeline-library
+      ref: refs/heads/main
+
+variables:
+  - group: policy-library
+
+parameters:
+  - name: directories
+    displayName: Bundle Directories (policy/ takes precedence)
+    type: stringList
+    values:
+      - azuredevops
+      - policy
+    default:
+      - policy
+
+  - name: storageContainer
+    displayName: Storage Container
+    type: string
+    default: development
+    values:
+      - development
+      - production
+
+jobs:
+  - job: pushDirectoriesBundle
+    displayName: Push Policy Directories Bundle
+    condition: ${{ not(containsValue(parameters.directories, 'policy')) }}
+    steps:
+      - template: util/tools/opa/install.yaml@pipeline-library
+        parameters:
+          tools:
+            - name: opa
+              version: latest
+
+      - bash: |
+          echo "##[section]Logging into Azure"
+          az login --service-principal -u $(POLICY_SP_CLIENT_ID) -p $(POLICY_SP_CLIENT_PASSWORD) --tenant $(POLICY_SP_TENANT_ID)
+        displayName: Login to Azure
+
+      - bash: |
+          bundle_name="${{ replace(join('-', parameters.directories), '_', '-') }}"
+          echo "##vso[task.setvariable variable=bundle_name]$bundle_name.tar.gz"
+          echo "Bundle name set to: $bundle_name"
+        displayName: Set bundle name variable
+
+      - bash: |
+          echo "##[command]Creating staging directory and copying util files"
+          mkdir -p staging/policy
+          cp -r policy/util staging/policy/util
+        displayName: Create staging directory and copy util files
+
+      - ${{ each directory in parameters.directories }}:
+        - bash: cp -r policy/${{ directory }} staging/policy/${{ directory }}
+          displayName: Copy ${{ directory }} to staging directory
+
+      - bash: |
+          echo "##[section]Building policy bundle"
+          echo "##[command]opa build --bundle policy --output bundle.tar.gz --revision $(git rev-parse HEAD)"
+          if ! opa build --bundle policy --output bundle.tar.gz --revision "$(git rev-parse HEAD)"; then
+            echo "##vso[task.logissue type=error]OPA build failed"
+            exit 1
+          fi
+          echo "##[section]OPA build completed successfully"
+        displayName: Build policy bundle
+        workingDirectory: staging
+
+      - bash: |
+          echo "##[section]Uploading bundle to Azure Storage"
+          echo "##[command]az storage blob upload --account-name $(POLICY_STORAGE_ACCOUNT) --container-name ${{ parameters.storageContainer }} --name $(bundle_name) --file bundle.tar.gz --overwrite true --auth-mode login"
+          az storage blob upload \
+            --account-name $(POLICY_STORAGE_ACCOUNT) \
+            --container-name ${{ parameters.storageContainer }} \
+            --name "$(bundle_name)" \
+            --file bundle.tar.gz \
+            --overwrite true \
+            --auth-mode login
+          if [ $? -eq 0 ]; then
+            echo "##[section]Upload completed successfully"
+          else
+            echo "##vso[task.logissue type=error]Upload failed"
+            exit 1
+          fi
+        displayName: Upload policy bundle to Azure Storage
+        workingDirectory: staging
+
+      - bash: |
+          echo "##[section]Cleaning up staging directory"
+          rm -rf staging
+        displayName: Clean up staging directory
+
+      - bash: |
+          echo "##[section]Logging out from Azure"
+          az logout
+        displayName: Logout from Azure
+        condition: always()
+
+  - job: pushPolicyDirectoryBundle
+    displayName: Push Policy Directory Bundle
+    steps:
+      - template: util/tools/opa/install.yaml@pipeline-library
+        parameters:
+          tools:
+            - name: opa
+              version: latest
+
+      - bash: |
+          echo "##[section]Logging into Azure"
+          az login --service-principal -u $(POLICY_SP_CLIENT_ID) -p $(POLICY_SP_CLIENT_PASSWORD) --tenant $(POLICY_SP_TENANT_ID)
+        displayName: Login to Azure
+
+      - bash: |
+          echo "##[section]Building policy bundle"
+          echo "##[command]opa build --bundle policy --output bundle.tar.gz --revision $(git rev-parse HEAD)"
+          if ! opa build --bundle policy --output bundle.tar.gz --revision "$(git rev-parse HEAD)"; then
+            echo "##vso[task.logissue type=error]OPA build failed"
+            exit 1
+          fi
+          echo "##[section]OPA build completed successfully"
+        displayName: Build policy bundle
+
+      - bash: |
+          echo "##[section]Uploading bundle to Azure Storage"
+          echo "##[command]az storage blob upload --account-name $(POLICY_STORAGE_ACCOUNT) --container-name ${{ parameters.storageContainer }} --name policy.tar.gz --file bundle.tar.gz --overwrite true --auth-mode login"
+          az storage blob upload \
+            --account-name $(POLICY_STORAGE_ACCOUNT) \
+            --container-name ${{ parameters.storageContainer }} \
+            --name policy.tar.gz \
+            --file bundle.tar.gz \
+            --overwrite true \
+            --auth-mode login
+          if [ $? -eq 0 ]; then
+            echo "##[section]Upload completed successfully"
+          else
+            echo "##vso[task.logissue type=error]Upload failed"
+            exit 1
+          fi
+        displayName: Upload policy bundle to Azure Storage
+
+      - bash: |
+          echo "##[section]Logging out from Azure"
+          az logout
+        displayName: Logout from Azure
+        condition: always()

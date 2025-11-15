@@ -1,0 +1,54 @@
+rules:
+  # idiomatic:
+  #   no-defined-entrypoint:
+  #     level: ignore
+  style:
+    todo-comment:
+      # don't report on todo comments
+      level: ignore
+    line-length:
+      max-line-length: 250
+      level: warning
+      ignore:
+        files:
+        - "*_test.rego"
+    opa-fmt:
+      level: error
+      ignore:
+        files:
+        # - "*_test.rego"
+    prefer-some-in-iteration:
+      # one of "error", "warning", "ignore"
+      level: error
+      # except iteration if nested at or above the level i.e. setting of
+      # '2' will allow `input[_].users[_]` but not `input[_]`
+      ignore-nesting-level: 2
+      # except iteration over items with sub-attributes, like
+      # `name := input.users[_].name`
+      # default is true
+      ignore-if-sub-attribute: true
+      ignore:
+        files:
+        - "*_test.rego"
+  testing:
+    test-outside-test-package:
+      level: error
+  imports:
+    avoid-importing-input:
+      level: ignore
+    unresolved-reference:
+      level: ignore
+  custom:
+    # custom rule configuration
+    naming-convention:
+      level: error
+      conventions:
+      # ensure all package names use lowercase letters and underscores only
+      - pattern: '^[a-z_]+(\.[a-z_]+)*$'
+        targets:
+        - package
+
+ignore:
+  # files can be excluded from all lint rules according to glob-patterns
+  files:
+  - "*_tmp.rego"
