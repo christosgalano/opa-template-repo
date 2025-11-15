@@ -44,33 +44,25 @@ jobs:
       - name: Lint files
         run: regal lint "${POLICY_DIR}"
 
-      # --- OPA tests & coverage -> JSON ---
-
       - name: Run OPA tests
-        run: |
-          opa test --format json "${POLICY_DIR}" > test.json
+        run: opa test --format json "${POLICY_DIR}" > test.json
 
       - name: Run OPA coverage
-        run: |
-          opa test --coverage --format json "${POLICY_DIR}" > coverage.json
-
-      # --- JSON -> JUnit & Cobertura XML (your scripts) ---
+        run: opa test --coverage --format json "${POLICY_DIR}" > coverage.json
 
       - name: Convert OPA test JSON to JUnit XML
         run: |
-          python scripts/opa_test_to_junit.py \
+          python .github/scripts/opa_test_to_junit.py \
             --test-json test.json \
             --output-xml test-results.xml
 
       - name: Convert OPA coverage JSON to Cobertura XML
         run: |
-          python scripts/opa_coverage_to_cobertura.py \
+          python .github/scripts/opa_coverage_to_cobertura.py \
             --coverage-json coverage.json \
             --output-xml coverage.xml \
             --policy-directory "${POLICY_DIR}" \
             --coverage-threshold 90
-
-      # --- Publish test results (OPA) ---
 
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -95,8 +87,6 @@ jobs:
       #     junit_files: conftest_junit.xml
       #     fail_on: test failures
       #     action_fail: false
-
-      # --- Publish coverage summary + badge ---
 
       - name: Publish code coverage results
         if: success() || failure()
