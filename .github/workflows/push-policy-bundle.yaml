@@ -4,9 +4,13 @@
 # Push an OPA policy bundle (bundle.tar.gz) to an Azure Storage Account.
 #
 # - Validates policies first by calling .github/workflows/ci.yaml
-# - Builds an OPA bundle from a given path (e.g. policy/, terraform/, terraform/azuredevops)
-# - Verifies the path exists before bundling
-# - Uploads the bundle to a single Azure Blob Storage container: "policy-library"
+# - Builds an OPA bundle from a path under policy/ ("" = whole policy)
+# - For partial bundles, stages:
+#     policy/util (if exists)
+#     policy/<tool>/util (if exists)
+#     policy/<bundle_path> (with its own util if present)
+# - Uploads the bundle to a single Azure Blob Storage container
+# - Adds blob metadata: gitRevision + bundlePath
 #
 # Requirements:
 # - Reusable CI workflow at .github/workflows/ci.yaml
@@ -25,18 +29,12 @@ on:
   workflow_dispatch:
     inputs:
       bundle_path:
-        description: >
-          Path to bundle (relative to repo root), e.g.:
-          - policy
-          - terraform
-          - terraform/azuredevops
-        required: true
-        default: 'policy'
+        description: 'Path under policy/ (empty = whole policy)'
+        required: false
+        default: ''
         type: string
       blob_name:
-        description: >
-          Optional blob name (defaults to <bundle_path-with-slashes-replaced>.tar.gz
-          if left empty)
+        description: 'Optional blob name (default derived from bundle_path)'
         required: false
         default: ''
         type: string
@@ -57,21 +55,45 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUNDLE_PATH: ${{ inputs.bundle_path }}
+      POLICY_ROOT: policy
+      BUNDLE_INPUT: ${{ inputs.bundle_path }}
       POLICY_STORAGE_ACCOUNT: ${{ vars.POLICY_STORAGE_ACCOUNT }}
-      STORAGE_CONTAINER: ${{ vars.POLICY_STORAGE_CONTAINER }}
+      POLICY_STORAGE_CONTAINER: ${{ vars.POLICY_STORAGE_CONTAINER }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Ensure bundle path exists
+      - name: Resolve and ensure bundle path exists
+        id: path
         run: |
-          echo "Bundle path: ${BUNDLE_PATH}"
-          if [ ! -d "${BUNDLE_PATH}" ]; then
-            echo "::error::Bundle path '${BUNDLE_PATH}' does not exist."
+          echo "Raw bundle input: ${BUNDLE_INPUT}"
+
+          # Strip leading "policy/" if user passes it
+          REL_PATH="${BUNDLE_INPUT#policy/}"
+
+          if [ "${REL_PATH}" = "policy" ] || [ -z "${REL_PATH}" ]; then
+            MODE="full"
+            FULL_PATH="${POLICY_ROOT}"
+            LOGICAL_NAME="policy"
+          else
+            MODE="partial"
+            FULL_PATH="${POLICY_ROOT}/${REL_PATH}"
+            LOGICAL_NAME="${REL_PATH}"
+          fi
+
+          echo "Resolved bundle path    : ${FULL_PATH}"
+          echo "Logical bundle name key : ${LOGICAL_NAME}"
+          echo "Mode                    : ${MODE}"
+
+          if [ ! -d "${FULL_PATH}" ]; then
+            echo "::error::Bundle path '${FULL_PATH}' does not exist."
             exit 1
           fi
+
+          echo "full_path=${FULL_PATH}" >> "$GITHUB_OUTPUT"
+          echo "logical_name=${LOGICAL_NAME}" >> "$GITHUB_OUTPUT"
+          echo "mode=${MODE}" >> "$GITHUB_OUTPUT"
 
       - name: Setup OPA
         uses: open-policy-agent/setup-opa@v2
@@ -86,18 +108,78 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Build OPA bundle
+        id: build
         run: |
-          echo "##[section] Building OPA bundle from path: ${BUNDLE_PATH}"
+          MODE="${{ steps.path.outputs.mode }}"
+          FULL_PATH="${{ steps.path.outputs.full_path }}"
+          LOGICAL_NAME="${{ steps.path.outputs.logical_name }}"
 
-          # Normalize path (strip trailing slash)
-          NORMALIZED_PATH="${BUNDLE_PATH%/}"
+          REVISION="$(git rev-parse HEAD)"
+          echo "Using revision: ${REVISION}"
+          echo "revision=${REVISION}" >> "$GITHUB_OUTPUT"
 
-          echo "Normalized path: ${NORMALIZED_PATH}"
-          echo "opa build --bundle \"${NORMALIZED_PATH}\" --output bundle.tar.gz --revision $(git rev-parse HEAD)"
+          if [ "${MODE}" = "full" ]; then
+            echo "##[section] Building FULL OPA bundle from policy root: ${POLICY_ROOT}"
+            echo "opa build --bundle \"${POLICY_ROOT}\" --output bundle.tar.gz --revision ${REVISION}"
 
-          if ! opa build --bundle "${NORMALIZED_PATH}" --output bundle.tar.gz --revision "$(git rev-parse HEAD)"; then
-            echo "::error::OPA build failed"
-            exit 1
+            if ! opa build --bundle "${POLICY_ROOT}" --output bundle.tar.gz --revision "${REVISION}"; then
+              echo "::error::OPA build failed"
+              exit 1
+            fi
+          else
+            echo "##[section] Building PARTIAL OPA bundle"
+            echo "Source path: ${FULL_PATH}"
+            echo "Logical name: ${LOGICAL_NAME}"
+
+            STAGING_ROOT="staging"
+            POLICY_STAGING="${STAGING_ROOT}/policy"
+
+            echo "Creating staging directory at: ${POLICY_STAGING}"
+            mkdir -p "${POLICY_STAGING}"
+
+            # Include root-level util if it exists (policy/util)
+            ROOT_UTIL_SRC="${POLICY_ROOT}/util"
+            if [ -d "${ROOT_UTIL_SRC}" ]; then
+              echo "Including root util from: ${ROOT_UTIL_SRC}"
+              cp -r "${ROOT_UTIL_SRC}" "${POLICY_STAGING}/"
+            else
+              echo "No root util directory found at: ${ROOT_UTIL_SRC}"
+            fi
+
+            # Derive tool from logical name (first segment)
+            TOOL="$(echo "${LOGICAL_NAME}" | cut -d'/' -f1)"
+            TOOL_UTIL_SRC="${POLICY_ROOT}/${TOOL}/util"
+
+            # Include tool-level util if it exists (e.g. policy/terraform/util)
+            if [ -d "${TOOL_UTIL_SRC}" ]; then
+              echo "Including tool util from: ${TOOL_UTIL_SRC}"
+              mkdir -p "${POLICY_STAGING}/${TOOL}"
+              cp -r "${TOOL_UTIL_SRC}" "${POLICY_STAGING}/${TOOL}/"
+            else
+              echo "No tool util directory found at: ${TOOL_UTIL_SRC}"
+            fi
+
+            # Include the specific subtree (e.g. policy/terraform/azuredevops)
+            TARGET_SRC="${FULL_PATH}"
+            TARGET_DST="${POLICY_STAGING}/${LOGICAL_NAME}"
+
+            echo "Copying target subtree:"
+            echo "  From: ${TARGET_SRC}"
+            echo "  To  : ${TARGET_DST}"
+
+            mkdir -p "$(dirname "${TARGET_DST}")"
+            cp -r "${TARGET_SRC}" "${TARGET_DST}"
+
+            echo "opa build --bundle policy --output bundle.tar.gz --revision ${REVISION} (working dir: ${STAGING_ROOT})"
+            cd "${STAGING_ROOT}"
+
+            if ! opa build --bundle policy --output bundle.tar.gz --revision "${REVISION}"; then
+              echo "::error::OPA build failed"
+              exit 1
+            fi
+
+            cd -
+            mv "${STAGING_ROOT}/bundle.tar.gz" bundle.tar.gz
           fi
 
           echo "OPA build completed successfully."
@@ -106,13 +188,12 @@ jobs:
         id: blob
         run: |
           INPUT_BLOB_NAME="${{ inputs.blob_name }}"
+          LOGICAL_NAME="${{ steps.path.outputs.logical_name }}"
 
           if [ -n "${INPUT_BLOB_NAME}" ]; then
             BLOB_NAME="${INPUT_BLOB_NAME}"
           else
-            # Derive from path: terraform/azuredevops -> terraform-azuredevops.tar.gz
-            NORMALIZED_PATH="${BUNDLE_PATH%/}"
-            SAFE_NAME="$(echo "${NORMALIZED_PATH}" | tr '/' '-')"
+            SAFE_NAME="$(echo "${LOGICAL_NAME}" | tr '/' '-')"
             BLOB_NAME="${SAFE_NAME}.tar.gz"
           fi
 
@@ -122,24 +203,28 @@ jobs:
       - name: Upload bundle to Azure Storage
         run: |
           if [ -z "${POLICY_STORAGE_ACCOUNT}" ]; then
-            echo "::error::POLICY_STORAGE_ACCOUNT secret is not set."
+            echo "::error::POLICY_STORAGE_ACCOUNT variable is not set."
             exit 1
           fi
 
           BLOB_NAME="${{ steps.blob.outputs.blob_name }}"
+          REVISION="${{ steps.build.outputs.revision }}"
+          LOGICAL_NAME="${{ steps.path.outputs.logical_name }}"
 
           echo "Uploading bundle.tar.gz to:"
           echo "  Account   : ${POLICY_STORAGE_ACCOUNT}"
-          echo "  Container : ${STORAGE_CONTAINER}"
+          echo "  Container : ${POLICY_STORAGE_CONTAINER}"
           echo "  Blob name : ${BLOB_NAME}"
+          echo "  Metadata  : gitRevision=${REVISION}, bundlePath=${LOGICAL_NAME}"
 
           az storage blob upload \
             --account-name "${POLICY_STORAGE_ACCOUNT}" \
-            --container-name "${STORAGE_CONTAINER}" \
+            --container-name "${POLICY_STORAGE_CONTAINER}" \
             --name "${BLOB_NAME}" \
             --file bundle.tar.gz \
             --overwrite true \
-            --auth-mode login
+            --auth-mode login \
+            --metadata gitRevision="${REVISION}" bundlePath="${LOGICAL_NAME}"
 
       - name: Logout from Azure
         if: always()
