@@ -48,7 +48,6 @@ permissions:
 
 jobs:
   validate:
-    name: Rego Policy Validation
     uses: ./.github/workflows/ci.yaml
     secrets: inherit
 
