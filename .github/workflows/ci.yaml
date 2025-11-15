@@ -9,12 +9,12 @@ name: CI
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-    branches:
-      - '*'
-  pull_request:
-    branches:
-      - main
+  # push:
+  #   branches:
+  #     - '*'
+  # pull_request:
+  #   branches:
+  #     - main
 
 jobs:
   validate:
