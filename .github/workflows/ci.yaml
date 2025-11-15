@@ -20,7 +20,11 @@ jobs:
   validate:
     name: Rego Policy Validation
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      issues: read
+      checks: write
+      pull-requests: write
     env:
       POLICY_DIR: policy
 
