@@ -9,12 +9,12 @@ name: CI
 on:
   workflow_call:
   workflow_dispatch:
-  # push:
-  #   branches:
-  #     - '*'
-  # pull_request:
-  #   branches:
-  #     - main
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - main
 
 jobs:
   validate:
@@ -41,9 +41,6 @@ jobs:
         uses: open-policy-agent/setup-regal@v1
         with:
           version: latest
-
-      - name: Setup Conftest
-        uses: ./.github/actions/setup-conftest
 
       - name: Lint files
         run: regal lint "${POLICY_DIR}"
@@ -81,16 +78,6 @@ jobs:
           job_summary: true
           compare_to_earlier_commit: true
           check_run_annotations: all tests, skipped tests
-
-      # If you also produce Conftest JUnit, you can add another invocation:
-      # - name: Publish Conftest results
-      #   uses: EnricoMi/publish-unit-test-result-action@v2
-      #   if: success() || failure()
-      #   with:
-      #     check_name: Conftest Results
-      #     junit_files: conftest_junit.xml
-      #     fail_on: test failures
-      #     action_fail: false
 
       - name: Publish code coverage results
         if: success() || failure()

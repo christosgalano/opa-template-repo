@@ -9,7 +9,7 @@ runs:
       id: cache-conftest
       uses: actions/cache@v4
       with:
-        path: /usr/local/bin/conftest
+        path: ~/.local/bin/conftest
         key: conftest-${{ runner.os }}-${{ runner.arch }}-latest
 
     - name: Install Conftest
@@ -31,10 +31,16 @@ runs:
         echo "Installing conftest version ${latest_version} on ${os_name}-${arch}..."
         echo "Downloading from: ${download_url}"
 
+        mkdir -p ~/.local/bin
         curl -fsSL "${download_url}" -o conftest.tar.gz
         tar -xzf conftest.tar.gz conftest
-        sudo mv conftest /usr/local/bin/
+        mv conftest ~/.local/bin/
+        chmod +x ~/.local/bin/conftest
         rm conftest.tar.gz
+
+    - name: Add Conftest to PATH
+      shell: bash
+      run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Verify Conftest installation
       shell: bash
