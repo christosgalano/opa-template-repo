@@ -8,3 +8,7 @@ Policies in this library help ensure compliance, security, and best practices ac
 - Prevent misconfigurations before deployment
 - Promote reusable, scalable policy development across multiple tools and providers
 - Validate infrastructure at scale with consistent patterns
+
+## Resources
+
+- [OPA Tutorial Video](https://youtu.be/kU1KhvxRynQ?si=KviZ-Qxs2ZsILhBP)
