@@ -1,3 +1,5 @@
 line-length: false
 no-duplicate-heading:
   siblings_only: true
+no-hard-tabs:
+  code_blocks: false
