@@ -11,7 +11,7 @@ Policies in this library help ensure compliance, security, and best practices ac
 
 ## Getting Started
 
-- [OPA Policy-Driven Governance for Infrastructure as Code](https://youtu.be/kU1KhvxRynQ?si=KviZ-Qxs2ZsILhBP): Video presentation covering OPA concepts and policy-driven governance for IaC
+- [OPA Policy-Driven Governance for Infrastructure as Code](https://youtu.be/kU1KhvxRynQ?si=XFSozYT1-Kj0BHVA): Video presentation covering OPA concepts and policy-driven governance for IaC
 
 ## Documentation
 
