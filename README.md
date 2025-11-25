@@ -9,6 +9,10 @@ Policies in this library help ensure compliance, security, and best practices ac
 - Promote reusable, scalable policy development across multiple tools and providers
 - Validate infrastructure at scale with consistent patterns
 
+## Getting Started
+
+- [OPA Policy-Driven Governance for Infrastructure as Code](https://youtu.be/kU1KhvxRynQ?si=KviZ-Qxs2ZsILhBP): Video presentation covering OPA concepts and policy-driven governance for IaC
+
 ## Documentation
 
 Comprehensive documentation is available in the [Wiki](https://github.com/christosgalano/opa-template-repo/wiki):
@@ -51,16 +55,15 @@ Step-by-step guide for creating policies:
 
 ### OPA Official Documentation
 
-- [OPA Documentation](https://www.openpolicyagent.org/docs/latest/) - Official OPA documentation
-- [Policy Language (Rego)](https://www.openpolicyagent.org/docs/latest/policy-language/) - Rego language reference
-- [Policy Testing](https://www.openpolicyagent.org/docs/latest/policy-testing/) - Writing and running tests
-- [Policy Reference](https://www.openpolicyagent.org/docs/latest/policy-reference/) - Built-in functions and operators
-- [Management: Bundles](https://www.openpolicyagent.org/docs/latest/management-bundles/) - Bundle distribution and management
+- [OPA Documentation](https://www.openpolicyagent.org/docs/latest/): Official OPA documentation
+- [Policy Language (Rego)](https://www.openpolicyagent.org/docs/latest/policy-language/): Rego language reference
+- [Policy Testing](https://www.openpolicyagent.org/docs/latest/policy-testing/): Writing and running tests
+- [Policy Reference](https://www.openpolicyagent.org/docs/latest/policy-reference/): Built-in functions and operators
+- [Management: Bundles](https://www.openpolicyagent.org/docs/latest/management-bundles/): Bundle distribution and management
 
 ### Learning Materials
 
-- [OPA Tutorial Video](https://youtu.be/kU1KhvxRynQ?si=KviZ-Qxs2ZsILhBP) - Introduction to OPA
-- [OPA Playground](https://play.openpolicyagent.org/) - Interactive Rego environment
+- [OPA Playground](https://play.openpolicyagent.org/): Interactive Rego environment
 
 ### Community
 
