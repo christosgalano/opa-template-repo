@@ -15,4 +15,13 @@ repos:
     rev: v0.61.0
     hooks:
       - id: conftest-verify
+        name: conftest verify
         args: [--policy, policy]
+  - repo: local
+    hooks:
+      - id: regal-lint
+        name: regal lint
+        language: system
+        entry: regal lint policy
+        pass_filenames: false
+        files: \.rego$

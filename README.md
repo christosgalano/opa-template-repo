@@ -45,11 +45,22 @@ Step-by-step guide for creating policies:
 - Testing patterns and best practices
 - Running tests and coverage
 
+### [AI-Assisted Development](https://github.com/christosgalano/opa-template-repo/wiki/AI-Development)
+
+Use GitHub Copilot to develop policies faster and more consistently:
+
+- Global instructions and file-type coding standards for Rego
+- `create-policy` skill to scaffold a policy and test pair
+- `review-policies` skill to lint, audit, and improve policies
+- OPA Expert custom agent for sustained development sessions
+- Pre-commit hooks for local quality gates
+
 ## Quick Start
 
 1. **Understand the structure**: Read the [Structure](https://github.com/christosgalano/opa-template-repo/wiki/Structure) guide to learn how policies are organized
 2. **Learn workflows**: Review the [Workflows](https://github.com/christosgalano/opa-template-repo/wiki/Workflows) guide to understand CI/CD and bundles
 3. **Create policies**: Follow the [Creating Policies](https://github.com/christosgalano/opa-template-repo/wiki/Creating-Policies) guide to add new validations
+4. **Use AI assistance**: See the [AI-Assisted Development](https://github.com/christosgalano/opa-template-repo/wiki/AI-Development) guide to develop with GitHub Copilot
 
 ## Resources
 
