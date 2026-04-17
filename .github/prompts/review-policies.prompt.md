@@ -3,13 +3,15 @@ name: review-policies
 description: >
   Review a group of OPA policy files for correctness, consistency, and style.
   Lints with Regal, explains what each policy does, identifies coverage gaps,
-  and suggests improvements. Use this skill when a user asks to review, audit,
-  explain, or improve policies in a directory.
+  and suggests improvements. Use when you want to review, audit, explain,
+  or improve policies in a directory.
+agent: OPA Policy Expert
+model: Claude Sonnet 4.6 (copilot)
 ---
 
-# Review Policies Skill
+# Review Policies
 
-Use this skill to perform a thorough review of one or more OPA policy files.
+Use this prompt to perform a thorough review of one or more OPA policy files.
 The review covers correctness, structural conventions, test quality, and cohesion.
 
 ## Workflow

@@ -2,13 +2,15 @@
 name: create-policy
 description: >
   Scaffold a new OPA entity policy or scenario policy together with its test
-  file. Use this skill when a user asks to add a new policy, create a new rule,
+  file. Use this when you want to add a new policy, create a new rule,
   or start a new validation for a resource type.
+agent: OPA Policy Expert
+model: Claude Sonnet 4.6 (copilot)
 ---
 
-# Create Policy Skill
+# Create Policy
 
-Use this skill to scaffold a complete, standards-compliant policy pair:
+Use this prompt to scaffold a complete, standards-compliant policy pair:
 a policy file (`<entity>.rego`) and its test file (`<entity>_test.rego`).
 
 ## Workflow

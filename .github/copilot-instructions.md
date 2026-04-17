@@ -185,4 +185,4 @@ Minimum coverage threshold: **90%**.
 - Use `some <var> in <collection>` (not the older `some <var>; collection[var]`).
 - Run `regal lint policy/` before committing and resolve all warnings.
 - See `.github/instructions/` for detailed per-file-type coding standards.
-- Use the skills in `.github/skills/` for guided task workflows.
+- Use the prompt files in `.github/prompts/` for guided task workflows (`/create-policy`, `/review-policies`).

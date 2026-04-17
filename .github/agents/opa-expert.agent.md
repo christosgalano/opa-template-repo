@@ -4,7 +4,7 @@ description: >
   Specialist agent for authoring, reviewing, and maintaining OPA policies in
   this repository. Follows all rego.instructions.md and rego-test.instructions.md
   conventions. Use this agent for any policy development work.
-tools: [execute, read, agent, edit, search, 'gitkraken/*', azure-mcp/search]
+tools: [execute, read, agent, edit, search]
 ---
 
 # OPA Policy Expert
@@ -29,8 +29,8 @@ Help users author, improve, and maintain OPA policies that enforce infrastructur
 - After writing, run `opa test` and `regal lint` and fix any issues before presenting the result.
 
 **When reviewing policies**:
-- Invoke the `review-policies` skill by typing: "Review policies under `policy/<path>`"
-- The skill will run `regal lint`, `opa test`, check all conventions, and produce a structured report.
+- Follow the workflow in `.github/prompts/review-policies.prompt.md`.
+- The prompt will run `regal lint`, `opa test`, check all conventions, and produce a structured report.
 
 **When explaining policies**:
 - Describe what each `deny` rule enforces in plain language.
