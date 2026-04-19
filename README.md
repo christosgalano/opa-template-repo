@@ -57,6 +57,8 @@ Use GitHub Copilot to develop policies faster and more consistently:
 
 ## Quick Start
 
+> **Tip**: Open this repository in a [dev container](https://code.visualstudio.com/docs/devcontainers/containers) (VS Code or GitHub Codespaces) to get OPA, Regal, Conftest, and pre-commit installed automatically.
+
 1. **Understand the structure**: Read the [Structure](https://github.com/christosgalano/opa-template-repo/wiki/Structure) guide to learn how policies are organized
 2. **Learn workflows**: Review the [Workflows](https://github.com/christosgalano/opa-template-repo/wiki/Workflows) guide to understand CI/CD and bundles
 3. **Create policies**: Follow the [Creating Policies](https://github.com/christosgalano/opa-template-repo/wiki/Creating-Policies) guide to add new validations
